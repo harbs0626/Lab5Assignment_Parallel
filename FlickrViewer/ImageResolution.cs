@@ -6,10 +6,8 @@ using System.Threading.Tasks;
 
 namespace FlickrViewer
 {
-   class FlickrResult
-   {
-      public string Title { get; set; }
-      public string URL { get; set; }
-   }
-
+    public class ImageResolution
+    {
+        public string Resolution { get; set; }
+    }
 }

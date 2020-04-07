@@ -8,112 +8,263 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml.Linq;
-
+using System.Configuration;
+using System.Drawing.Imaging;
+using System.Net;
+using System.Collections.Generic;
+/// <summary>
+/// ** Student Name     : Harbin Ramo
+/// ** Student Number   : 301046044
+/// ** Lab Assignment   : #5 - Parallel Programming
+/// ** Date (MM/dd/yyy) : 04/07/2020
+/// ** CHANGELOGS/PATCHES:
+///     1. Added items to App.Config:
+///         a. key
+///         b. value (from FlickrAPI)
+///         c. Retrieve value from b via FickrViewerForm constructor
+///     2. Added Controls:
+///         a. Label "Please select image format:"
+///         b. ComboBox "imageFormatComboBox"
+///         c. Label "Please enter image size (width):"
+///         d. TextBox "imageSizeTextBox"
+///         e. Button "saveButton"
+///         f. ProgressBar "saveProgressBar"
+///         g. Label "Image Resolution"
+///         h. TextBox "imageResolutionTextBox" (readOnly set to true)
+///         i. Label "Image FileName:"
+///         j. TextBox "imageFileNameTextBox"///         
+///     3. Added/Updated Methods:
+///         a. saveButton_Click
+///         b. imagesListBox_SelectedIndexChanged
+///         c. GetMyImageFormat
+///     4. Added Class:
+///         a. ImageConvert
+///         b. ImageResolution
+/// </summary>
 namespace FlickrViewer
 {
-   public partial class FickrViewerForm : Form
-   {
-      // Use your Flickr API key here--you can get one at:
-      // https://www.flickr.com/services/apps/create/apply
-      private const string KEY = "your Flickr api key";
+    public partial class FickrViewerForm : Form
+    {
+        // Use your Flickr API key here--you can get one at:
+        // https://www.flickr.com/services/apps/create/apply
+        
+        // ** Harbin Ramo - 04/07/2020
+        // private const string KEY = "";
+        public static string KEY;
+        // ** Harbin Ramo - 04/07/2020
 
-      // object used to invoke Flickr web service      
-      private static HttpClient flickrClient = new HttpClient();
+        // object used to invoke Flickr web service      
+        private static HttpClient flickrClient = new HttpClient();
 
-      Task<string> flickrTask = null; // Task<string> that queries Flickr
+        Task<string> flickrTask = null; // Task<string> that queries Flickr
 
-      public FickrViewerForm()
-      {
-         InitializeComponent();
-      }
+        public FickrViewerForm()
+        {
+            InitializeComponent();
 
-      // initiate asynchronous Flickr search query; 
-      // display results when query completes
-      private async void searchButton_Click(object sender, EventArgs e)
-      {
-         // if flickrTask already running, prompt user 
-         if (flickrTask?.Status != TaskStatus.RanToCompletion)
-         {
-            var result = MessageBox.Show(
-               "Cancel the current Flickr search?",
-               "Are you sure?", MessageBoxButtons.YesNo,
-               MessageBoxIcon.Question);
+            // ** Harbin Ramo - 04/07/2020
+            // ** Load Flickr API Key from app.Config
+            KEY = string.Empty;
+            KEY = ConfigurationManager.AppSettings["API"].ToString();
+            // ** Harbin Ramo - 04/07/2020
+        }
 
-            // determine whether user wants to cancel prior search
-            if (result == DialogResult.No)
+        // initiate asynchronous Flickr search query; 
+        // display results when query completes
+        private async void searchButton_Click(object sender, EventArgs e)
+        {
+            // if flickrTask already running, prompt user 
+            if (flickrTask?.Status != TaskStatus.RanToCompletion)
             {
-               return;
+                var result = MessageBox.Show(
+                    "Cancel the current Flickr search?",
+                    "Are you sure?", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                // determine whether user wants to cancel prior search
+                if (result == DialogResult.No)
+                {
+                    return;
+                }
+                else
+                {
+                    flickrClient.CancelPendingRequests(); // cancel search
+                }
+            }
+
+            // Flickr's web service URL for searches                         
+            var flickrURL = "https://api.flickr.com/services/rest/?method=" +
+                            $"flickr.photos.search&api_key={KEY}&" +
+                            $"tags={inputTextBox.Text.Replace(" ", ",")}" +
+                            "&tag_mode=all&per_page=500&privacy_filter=1";
+
+            imagesListBox.DataSource = null; // remove prior data source
+            imagesListBox.Items.Clear(); // clear imagesListBox
+            pictureBox.Image = null; // clear pictureBox
+            imagesListBox.Items.Add("Loading..."); // display Loading...
+
+            // ** Harbin Ramo - 04/07/2020
+            this.imageResolutionTextBox.Clear();
+            this.imageFormatComboBox.Items.Clear();
+            this.imageSizeTextBox.Clear();
+            this.imageFileNameTextBox.Clear();
+            // ** Harbin Ramo - 04/07/2020
+
+            // invoke Flickr web service to search Flick with user's tags
+            flickrTask = flickrClient.GetStringAsync(flickrURL);
+
+            // await flickrTask then parse results with XDocument and LINQ
+            XDocument flickrXML = XDocument.Parse(await flickrTask);
+
+            // gather information on all photos
+            var flickrPhotos = from photo in flickrXML.Descendants("photo")
+                                let id = photo.Attribute("id").Value
+                                let title = photo.Attribute("title").Value
+                                let secret = photo.Attribute("secret").Value
+                                let server = photo.Attribute("server").Value
+                                let farm = photo.Attribute("farm").Value
+                                select new FlickrResult
+                                {
+                                    Title = title,
+                                    URL = $"https://farm{farm}.staticflickr.com/" +
+                                        $"{server}/{id}_{secret}.jpg"
+                                };
+
+            imagesListBox.Items.Clear(); // clear imagesListBox
+
+            // set ListBox properties only if results were found
+            if (flickrPhotos.Any())
+            {
+                // ** Harbin Ramo - 04/07/2020
+                int _recordCount = flickrPhotos.ToList().Count;
+                this.saveProgressBar.Minimum = 0;
+                this.saveProgressBar.Value = this.saveProgressBar.Minimum;
+                this.saveProgressBar.Maximum = _recordCount;
+
+                for (int i = 0; i < _recordCount; i++){
+                    this.saveProgressBar.Value = i;
+                }
+
+                MessageBox.Show($"{_recordCount} record(s) found.");
+
+                this.imageFormatComboBox.Items.Clear();
+                this.imageFormatComboBox.Items.Add("-----");
+                this.imageFormatComboBox.Items.Add("JPEG");
+                this.imageFormatComboBox.Items.Add("GIF");
+                this.imageFormatComboBox.Items.Add("PNG");
+                this.imageFormatComboBox.Items.Add("BMP");
+                this.imageFormatComboBox.SelectedIndex = 0;
+                // ** Harbin Ramo - 04/07/2020
+
+                imagesListBox.DataSource = flickrPhotos.ToList();
+                imagesListBox.DisplayMember = "Title";
+            }
+            else // no matches were found
+            {
+                imagesListBox.Items.Add("No matches");
+            }
+        }
+
+        // display selected image
+        private async void imagesListBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (imagesListBox.SelectedItem != null)
+            {
+                string selectedURL = ((FlickrResult) imagesListBox.SelectedItem).URL;
+
+                // use HttpClient to get selected image's bytes asynchronously
+                byte[] imageBytes = await flickrClient.GetByteArrayAsync(selectedURL);
+
+                // display downloaded image in pictureBox                  
+                using (var memoryStream = new MemoryStream(imageBytes))
+                {
+                    pictureBox.Image = Image.FromStream(memoryStream);
+
+                    // ** Harbin Ramo - 04/07/2020
+                    this.imageResolutionTextBox.Text = $"{this.pictureBox.Image.Width}x{this.pictureBox.Height}";
+                    this.imageFileNameTextBox.Text = Path.GetFileName(selectedURL);
+                    // ** Harbin Ramo - 04/07/2020
+                }
+            }
+        }
+
+        // ** Harbin Ramo - 04/07/2020
+        private static string _imageExtension;
+
+        private async void saveButton_Click(object sender, EventArgs e)
+        {
+            if (this.imageFormatComboBox.SelectedIndex == 0)
+            {
+                MessageBox.Show("Please select image format.");
+                return;
+            }
+            else if(this.imageSizeTextBox.Text == string.Empty || this.imageSizeTextBox.Text == null)
+            {
+                MessageBox.Show("Please enter image size for resizing.");
+                return;
             }
             else
             {
-               flickrClient.CancelPendingRequests(); // cancel search
+                DialogResult _dialogResult = MessageBox.Show("Do you want to save/download this image?",
+                    "Save Image", MessageBoxButtons.YesNo);
+
+                if (_dialogResult == DialogResult.Yes)
+                {
+                    string _fileURL = ((FlickrResult)imagesListBox.SelectedItem).URL;
+                    ImageFormat _imageFormat = GetMyImageFormat(this.imageFormatComboBox.SelectedItem.ToString());
+
+                    string _sourceFile = Path.GetFileNameWithoutExtension(_fileURL);
+                    string _newFile = $"new_{_sourceFile}{_imageExtension}";
+                    string _destinationFile = Environment.CurrentDirectory + "\\" + _newFile;
+
+                    byte[] _imageBytes = await flickrClient.GetByteArrayAsync(_fileURL);
+                    int _imageSize = int.Parse(this.imageSizeTextBox.Text);
+                    
+                    ImageConvert _imageConvert = new ImageConvert();
+                    using (MemoryStream _memoryStream = new MemoryStream(
+                        _imageConvert.Resize(_imageBytes, _imageSize, _imageFormat)))
+                    {
+                        Image _tempImageHolder = Image.FromStream(_memoryStream);
+                        _tempImageHolder.Save(_destinationFile, _imageFormat);
+                    }
+
+                    MessageBox.Show($"Successfully downloaded image file: {_newFile}");
+                }
             }
-         }
+        }
 
-         // Flickr's web service URL for searches                         
-         var flickrURL = "https://api.flickr.com/services/rest/?method=" +
-            $"flickr.photos.search&api_key={KEY}&" +
-            $"tags={inputTextBox.Text.Replace(" ", ",")}" +
-            "&tag_mode=all&per_page=500&privacy_filter=1";
+        public ImageFormat GetMyImageFormat(string selectedItem)
+        {
+            ImageFormat _imageFormat = null;
 
-         imagesListBox.DataSource = null; // remove prior data source
-         imagesListBox.Items.Clear(); // clear imagesListBox
-         pictureBox.Image = null; // clear pictureBox
-         imagesListBox.Items.Add("Loading..."); // display Loading...
-
-         // invoke Flickr web service to search Flick with user's tags
-         flickrTask = flickrClient.GetStringAsync(flickrURL);
-
-         // await flickrTask then parse results with XDocument and LINQ
-         XDocument flickrXML = XDocument.Parse(await flickrTask);
-
-         // gather information on all photos
-         var flickrPhotos =
-            from photo in flickrXML.Descendants("photo")
-            let id = photo.Attribute("id").Value
-            let title = photo.Attribute("title").Value
-            let secret = photo.Attribute("secret").Value
-            let server = photo.Attribute("server").Value
-            let farm = photo.Attribute("farm").Value
-            select new FlickrResult
+            switch (selectedItem)
             {
-               Title = title,
-               URL = $"https://farm{farm}.staticflickr.com/" +
-                  $"{server}/{id}_{secret}.jpg"
-            };
-         imagesListBox.Items.Clear(); // clear imagesListBox
-
-         // set ListBox properties only if results were found
-         if (flickrPhotos.Any())
-         {
-            imagesListBox.DataSource = flickrPhotos.ToList();
-            imagesListBox.DisplayMember = "Title";
-         }
-         else // no matches were found
-         {
-            imagesListBox.Items.Add("No matches");
-         }
-      }
-
-      // display selected image
-      private async void imagesListBox_SelectedIndexChanged(
-         object sender, EventArgs e)
-      {
-         if (imagesListBox.SelectedItem != null)
-         {
-            string selectedURL = ((FlickrResult) imagesListBox.SelectedItem).URL;
-
-            // use HttpClient to get selected image's bytes asynchronously
-            byte[] imageBytes = await flickrClient.GetByteArrayAsync(selectedURL);
-
-            // display downloaded image in pictureBox                  
-            using (var memoryStream = new MemoryStream(imageBytes))
-            {
-               pictureBox.Image = Image.FromStream(memoryStream);
+                case "JPEG":
+                    _imageFormat = ImageFormat.Jpeg;
+                    _imageExtension = ".jpeg";
+                    break;
+                case "GIF":
+                    _imageFormat = ImageFormat.Gif;
+                    _imageExtension = ".gif";
+                    break;
+                case "PNG":
+                    _imageFormat = ImageFormat.Png;
+                    _imageExtension = ".png";
+                    break;
+                case "BMP":
+                    _imageFormat = ImageFormat.Bmp;
+                    _imageExtension = ".bmp";
+                    break;
+                default:
+                    break;
             }
-         }
-      }
-   }
+
+            return _imageFormat;
+        }
+        // ** Harbin Ramo - 04/07/2020
+       
+
+    }
 }
 
 /**************************************************************************
