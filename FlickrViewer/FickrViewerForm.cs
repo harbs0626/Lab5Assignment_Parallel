@@ -27,18 +27,23 @@ using System.Collections.Generic;
 ///         b. ComboBox "imageFormatComboBox"
 ///         c. Label "Please enter image size (width):"
 ///         d. TextBox "imageSizeTextBox"
-///         e. Button "saveButton"
+///         e. Button "saveResizeButton"
 ///         f. ProgressBar "saveProgressBar"
 ///         g. Label "Image Resolution"
 ///         h. TextBox "imageResolutionTextBox" (readOnly set to true)
 ///         i. Label "Image FileName:"
-///         j. TextBox "imageFileNameTextBox"///         
+///         j. TextBox "imageFileNameTextBox"
+///         h. Button "resizeButton"
+///         i. Button "saveOriginalButton"
 ///     3. Added/Updated Methods:
 ///         a. saveButton_Click
 ///         b. imagesListBox_SelectedIndexChanged
 ///         c. GetMyImageFormat
+///         d. resizeButton_Click
+///         e. saveOriginalButton_Click
+///         f. exitButton_Click
 ///     4. Added Class:
-///         a. ImageConvert
+///         a. ImageManipulation
 ///         b. ImageResolution
 /// </summary>
 namespace FlickrViewer
@@ -168,71 +173,95 @@ namespace FlickrViewer
         // display selected image
         private async void imagesListBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (imagesListBox.SelectedItem != null)
+            try
             {
-                string selectedURL = ((FlickrResult) imagesListBox.SelectedItem).URL;
-
-                // use HttpClient to get selected image's bytes asynchronously
-                byte[] imageBytes = await flickrClient.GetByteArrayAsync(selectedURL);
-
-                // display downloaded image in pictureBox                  
-                using (var memoryStream = new MemoryStream(imageBytes))
+                if (imagesListBox.SelectedItem != null)
                 {
-                    pictureBox.Image = Image.FromStream(memoryStream);
+                    string selectedURL = ((FlickrResult) imagesListBox.SelectedItem).URL;
 
-                    // ** Harbin Ramo - 04/07/2020
-                    this.imageResolutionTextBox.Text = $"{this.pictureBox.Image.Width}x{this.pictureBox.Height}";
-                    this.imageFileNameTextBox.Text = Path.GetFileName(selectedURL);
-                    // ** Harbin Ramo - 04/07/2020
+                    // use HttpClient to get selected image's bytes asynchronously
+                    byte[] imageBytes = await flickrClient.GetByteArrayAsync(selectedURL);
+
+                    // display downloaded image in pictureBox                  
+                    using (var memoryStream = new MemoryStream(imageBytes))
+                    {
+                        pictureBox.Image = Image.FromStream(memoryStream);
+
+                        // ** Harbin Ramo - 04/07/2020
+                        this.imageResolutionTextBox.Text = $"{this.pictureBox.Image.Width}x{this.pictureBox.Height}";
+                        this.imageFileNameTextBox.Text = Path.GetFileName(selectedURL);
+                        // ** Harbin Ramo - 04/07/2020
+                    }
                 }
+            }
+            catch(Exception ex)
+            {
+                MessageBox.Show("An error occurred while selecting an image.");
+                return;
             }
         }
 
         // ** Harbin Ramo - 04/07/2020
         private static string _imageExtension;
+        // ** Harbin Ramo - 04/07/2020
 
-        private async void saveButton_Click(object sender, EventArgs e)
+        // ** Harbin Ramo - 04/07/2020
+        private async void saveResizeButton_Click(object sender, EventArgs e)
         {
-            if (this.imageFormatComboBox.SelectedIndex == 0)
+            try
             {
-                MessageBox.Show("Please select image format.");
-                return;
-            }
-            else if(this.imageSizeTextBox.Text == string.Empty || this.imageSizeTextBox.Text == null)
-            {
-                MessageBox.Show("Please enter image size for resizing.");
-                return;
-            }
-            else
-            {
-                DialogResult _dialogResult = MessageBox.Show("Do you want to save/download this image?",
-                    "Save Image", MessageBoxButtons.YesNo);
-
-                if (_dialogResult == DialogResult.Yes)
+                if (this.imageFormatComboBox.SelectedIndex == 0)
                 {
-                    string _fileURL = ((FlickrResult)imagesListBox.SelectedItem).URL;
-                    ImageFormat _imageFormat = GetMyImageFormat(this.imageFormatComboBox.SelectedItem.ToString());
+                    MessageBox.Show("Please select image format.");
+                    return;
+                }
+                else if (this.imageSizeTextBox.Text == string.Empty || this.imageSizeTextBox.Text == null)
+                {
+                    MessageBox.Show("Please enter image size for resizing.");
+                    return;
+                }
+                else
+                {
+                    DialogResult _dialogResult = MessageBox.Show("Do you want to save/download this resized image?",
+                        "Save Image", MessageBoxButtons.YesNo);
 
-                    string _sourceFile = Path.GetFileNameWithoutExtension(_fileURL);
-                    string _newFile = $"new_{_sourceFile}{_imageExtension}";
-                    string _destinationFile = Environment.CurrentDirectory + "\\" + _newFile;
-
-                    byte[] _imageBytes = await flickrClient.GetByteArrayAsync(_fileURL);
-                    int _imageSize = int.Parse(this.imageSizeTextBox.Text);
-                    
-                    ImageConvert _imageConvert = new ImageConvert();
-                    using (MemoryStream _memoryStream = new MemoryStream(
-                        _imageConvert.Resize(_imageBytes, _imageSize, _imageFormat)))
+                    if (_dialogResult == DialogResult.Yes)
                     {
-                        Image _tempImageHolder = Image.FromStream(_memoryStream);
-                        _tempImageHolder.Save(_destinationFile, _imageFormat);
-                    }
+                        string _fileURL = ((FlickrResult)imagesListBox.SelectedItem).URL;
 
-                    MessageBox.Show($"Successfully downloaded image file: {_newFile}");
+                        ImageManipulation _manipulate = new ImageManipulation();
+                        _manipulate.SetImageFormat = GetMyImageFormat(this.imageFormatComboBox.SelectedItem.ToString());
+
+                        byte[] _imageBytes = await flickrClient.GetByteArrayAsync(_fileURL);
+
+                        string _sourceFile = Path.GetFileNameWithoutExtension(_fileURL);
+                        string _newFile = $"NEW_{_sourceFile}{_imageExtension}";
+                        string _destinationFile = Environment.CurrentDirectory + "\\" + _newFile;
+
+                        int _imageSize = int.Parse(this.imageSizeTextBox.Text);
+                        byte[] _imageResized = _manipulate.Resize(_imageBytes, _imageSize);
+
+                        using (var _memoryStream = new MemoryStream(_imageResized))
+                        {
+                            Image _tempImageHolder = Image.FromStream(_memoryStream);
+                            _tempImageHolder.Save(_destinationFile, _manipulate.SetImageFormat);
+                        }
+
+                        MessageBox.Show($"Successfully downloaded resized image file: {_newFile}");
+
+                        this.saveResizeButton.Enabled = false;
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+                return;
+            }
         }
+        // ** Harbin Ramo - 04/07/2020
 
+        // ** Harbin Ramo - 04/07/2020
         public ImageFormat GetMyImageFormat(string selectedItem)
         {
             ImageFormat _imageFormat = null;
@@ -241,7 +270,7 @@ namespace FlickrViewer
             {
                 case "JPEG":
                     _imageFormat = ImageFormat.Jpeg;
-                    _imageExtension = ".jpeg";
+                    _imageExtension = ".jpg";
                     break;
                 case "GIF":
                     _imageFormat = ImageFormat.Gif;
@@ -262,7 +291,92 @@ namespace FlickrViewer
             return _imageFormat;
         }
         // ** Harbin Ramo - 04/07/2020
-       
+
+        // ** Harbin Ramo - 04/07/2020
+        private async void resizeButton_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (this.imageFormatComboBox.SelectedIndex == 0)
+                {
+                    MessageBox.Show("Please select image format.");
+                    return;
+                }
+                else if (this.imageSizeTextBox.Text == string.Empty || this.imageSizeTextBox.Text == null)
+                {
+                    MessageBox.Show("Please enter image size for resizing.");
+                    return;
+                }
+                else
+                {
+                    if (imagesListBox.SelectedItem != null)
+                    {
+                        string _fileURL = ((FlickrResult)imagesListBox.SelectedItem).URL;
+
+                        ImageManipulation _manipulate = new ImageManipulation();
+                        _manipulate.SetImageFormat = GetMyImageFormat(this.imageFormatComboBox.SelectedItem.ToString());
+
+                        byte[] _imageBytes = await flickrClient.GetByteArrayAsync(_fileURL);
+
+                        int _imageSize = int.Parse(this.imageSizeTextBox.Text);
+                        byte[] _imageResized = _manipulate.Resize(_imageBytes, _imageSize);
+
+                        using (var _memoryStream = new MemoryStream(_imageResized))
+                        {
+                            this.pictureBox.Image = Image.FromStream(_memoryStream);
+                        }
+
+                        MessageBox.Show("Image has been resized.");
+
+                        this.saveResizeButton.Enabled = true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+                return;
+            }
+        }
+        // ** Harbin Ramo - 04/07/2020
+
+        // ** Harbin Ramo - 04/07/2020
+        private void exitButton_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
+        }
+        // ** Harbin Ramo - 04/07/2020
+
+        // ** Harbin Ramo - 04/07/2020
+        private void saveOriginalButton_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                DialogResult _dialogResult = MessageBox.Show("Do you want to save/download the original image?",
+                    "Save Image", MessageBoxButtons.YesNo);
+
+                if (_dialogResult == DialogResult.Yes)
+                {
+                    string _fileURL = ((FlickrResult)imagesListBox.SelectedItem).URL;
+                    string _sourceFile = Path.GetFileName(_fileURL);
+                    string _origFile = $"ORIGINAL_{_sourceFile}";
+                    string _destinationFile = Environment.CurrentDirectory + "\\" + _origFile;
+
+                    using (WebClient webClient = new WebClient())
+                    {
+                        webClient.DownloadFile(_fileURL, _destinationFile);
+                    }
+
+                    MessageBox.Show($"Successfully downloaded original image file: {_origFile}");
+                }
+            }
+            catch(Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+                return;
+            }
+        }
+        // ** Harbin Ramo - 04/07/2020
 
     }
 }

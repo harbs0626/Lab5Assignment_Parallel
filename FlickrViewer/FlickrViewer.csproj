@@ -53,7 +53,7 @@
       <DependentUpon>FickrViewerForm.cs</DependentUpon>
     </Compile>
     <Compile Include="FlickrResult.cs" />
-    <Compile Include="ImageConvert.cs" />
+    <Compile Include="ImageManipulation.cs" />
     <Compile Include="ImageResolution.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
